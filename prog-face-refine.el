@@ -76,7 +76,8 @@ Any changes to this value must run `prog-face-refine-refresh' for them to be tak
   (condition-case err
       (prog1 nil
         (string-match-p re ""))
-    (error (error-message-string err))))
+    (error
+     (error-message-string err))))
 
 (defun prog-face-refine--valid-match-or-warn (index var match)
   "Ensure MATCH can be used to match text at INDEX in VAR."
