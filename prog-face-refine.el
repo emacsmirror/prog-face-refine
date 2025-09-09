@@ -245,7 +245,7 @@ Return nil if the state is known not to have changed."
           (push (cons match face) prog-face-refine--list-string))
          (t ;; `prog-face-refine--valid-type-or-warn' must catch this.
           (error "Internal error"))))
-      (setq index (1+ index)))
+      (incf index))
 
     (let ((fn
            (cond
