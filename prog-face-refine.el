@@ -34,6 +34,22 @@
 
 
 ;; ---------------------------------------------------------------------------
+;; Compatibility
+
+(when (and (version< emacs-version "31.1") (not (and (fboundp 'incf) (fboundp 'decf))))
+  (defmacro incf (place &optional delta)
+    "Increment PLACE by DELTA or 1."
+    (declare (debug (gv-place &optional form)))
+    (gv-letplace (getter setter) place
+      (funcall setter `(+ ,getter ,(or delta 1)))))
+  (defmacro decf (place &optional delta)
+    "Decrement PLACE by DELTA or 1."
+    (declare (debug (gv-place &optional form)))
+    (gv-letplace (getter setter) place
+      (funcall setter `(- ,getter ,(or delta 1))))))
+
+
+;; ---------------------------------------------------------------------------
 ;; Custom Variables
 
 (defgroup prog-face-refine nil
@@ -59,6 +75,7 @@ Any changes to this value must run `prog-face-refine-refresh' for them to be tak
 
 (defvar-local prog-face-refine--list-comment nil)
 (defvar-local prog-face-refine--list-string nil)
+
 
 ;; ---------------------------------------------------------------------------
 ;; Internal Validation
