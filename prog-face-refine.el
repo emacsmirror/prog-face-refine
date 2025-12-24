@@ -6,24 +6,26 @@
 ;; Author: Campbell Barton <ideasman42@gmail.com>
 
 ;; URL: https://codeberg.org/ideasman42/emacs-prog-face-refine
+;; Keywords: faces, convenience
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "28.0"))
 
 ;;; Commentary:
 
-;; Refine faces for comments & strings.
+;; Refine faces for comments and strings.
 
-;;; Usage
+;; Usage:
 
-;; ;; Refine emacs-lisp-mode comment faces.
+;; ;; Refine emacs-lisp-mode comment and string faces.
 ;; (add-hook
 ;;  'emacs-lisp-mode-hook
 ;;  (lambda ()
-;;    (setq prog-face-refine-list
-;;          (list
-;;           (list ";[[:blank:]]" 'comment '((t (:inherit font-lock-comment-face :weight bold))))
-;;           (list ";;;[[:blank:]]" 'comment '((t (:inherit warning :weight bold))))))
-;;    ;; Activate in the current buffer.
+;;    (setq-local prog-face-refine-list
+;;                (list
+;;                 (list ";[[:blank:]]" 'comment '((t (:inherit font-lock-comment-face :weight bold))))
+;;                 (list ";;;[[:blank:]]" 'comment '((t (:inherit warning :weight bold))))
+;;                 (list "\"\\\\n" 'string '((t (:inherit font-lock-string-face :slant italic))))))
+;;    ;; Enable the mode in the current buffer.
 ;;    (prog-face-refine-mode)))
 
 ;;; Code:
@@ -58,23 +60,32 @@
   :group 'convenience)
 
 (defcustom prog-face-refine-list nil
-  "A list of matches for comments, each item must be a list where:
+  "A list of matches for comments and strings, each item must be a list where:
 
-- First item is a match, either a regexp string or a function.
+- The first item is a match, either a regexp string or a function.
   The function must take a single `state' argument
   (in the format returned by `syntax-ppss'),
   a non-nil return value causes the match to succeed.
 - The second item is a symbol, either `comment' or `string'.
-- The third argument is a face.
+- The third item is a face.
 
-Any changes to this value must run `prog-face-refine-refresh' for them to be taken into account."
-  :type '(repeat (symbol (choice regexp function) face)))
+Changes to this variable require calling `prog-face-refine-refresh' to take effect."
+  :type
+  '(repeat (list (choice regexp function)
+                 (choice (const comment) (const string))
+                 face)))
+
+(defcustom prog-face-refine-lighter nil
+  "Mode-line lighter for `prog-face-refine-mode'."
+  :type '(choice (const :tag "None" nil) string))
 
 
 ;; ---------------------------------------------------------------------------
 ;; Internal Variables
 
+;; Processed list of comment match patterns and their faces.
 (defvar-local prog-face-refine--list-comment nil)
+;; Processed list of string match patterns and their faces.
 (defvar-local prog-face-refine--list-string nil)
 
 
@@ -83,13 +94,13 @@ Any changes to this value must run `prog-face-refine-refresh' for them to be tak
 ;;
 ;; These only run when enabling the mode to validate `prog-face-refine-list'.
 ;; Validation could be skipped, it's just a way to avoid unexpected errors during
-;; font-locking, a time when errors are often difficult to trouble-shoot.
+;; font-locking, a time when errors are often difficult to troubleshoot.
 
 (defun prog-face-refine--message (fmt &rest args)
-  "Message FMT with ARGS (using prefix)."
+  "Display a message with FMT and ARGS, prefixed with the package name."
   (apply #'message (concat "prog-face-refine: " fmt) args))
 
-(defun prog-face-refine--regexp-valid-or-warn (re)
+(defun prog-face-refine--regexp-valid-or-error-as-string (re)
   "Return nil if RE is a valid regexp, otherwise the error string."
   (condition-case err
       (prog1 nil
@@ -98,50 +109,55 @@ Any changes to this value must run `prog-face-refine-refresh' for them to be tak
      (error-message-string err))))
 
 (defun prog-face-refine--valid-match-or-warn (index var match)
-  "Ensure MATCH can be used to match text at INDEX in VAR."
+  "Check if MATCH can be used to match text at INDEX in VAR.
+Return non-nil on success, nil if invalid (with a warning message)."
   (cond
    ((stringp match)
-    (let ((err (prog-face-refine--regexp-valid-or-warn match)))
+    (let ((err (prog-face-refine--regexp-valid-or-error-as-string match)))
       (cond
        (err
-        (prog-face-refine--message "%S is not a valid REGEXP (1st item, %d index in %s)."
+        (prog-face-refine--message "%S is not a valid regexp (1st item, at index %d in %s)."
                                    match
                                    index
                                    var)
-        t)
+        nil)
        (t
-        nil))
-      t))
+        t))))
    ((functionp match)
     t)
    (t
-    (prog-face-refine--message "%S is not a string or function (1st item, %d index in %s)."
+    (prog-face-refine--message "%S is not a string or function (1st item, at index %d in %s)."
                                match
                                index
                                var)
     nil)))
 
 (defun prog-face-refine--valid-type-or-warn (index var ty)
-  "Ensure TY is a valid type at INDEX in VAR."
+  "Check if TY is a valid type at INDEX in VAR.
+Return non-nil on success, nil if invalid (with a warning message)."
   (cond
-   ((memq ty (list 'comment 'string))
+   ((memq ty '(comment string))
     t)
    (t
     (prog-face-refine--message
-     "%S is not valid type, expected 'comment or 'string (2nd item, %d index in %s)."
+     "%S is not a valid type, expected `comment' or `string' (2nd item, at index %d in %s)."
      ty index var)
     nil)))
 
 (defun prog-face-refine--valid-face-or-warn (index var face)
-  "Ensure FACE can be used as a text face property at INDEX in VAR."
+  "Check if FACE can be used as a text face property at INDEX in VAR.
+Return non-nil on success, nil if invalid (with a warning message)."
   (cond
    ((facep face)
     t)
-   ((listp face)
-    ;; Assume the contents is valid since list faces can be complex.
+   ((and face (listp face))
+    ;; Assume the contents are valid since list faces can be complex.
     t)
    (t
-    (prog-face-refine--message "%S is not valid face (3rd item, %d index in %s)." face index var)
+    (prog-face-refine--message "%S is not a valid face (3rd item, at index %d in %s)."
+                               face
+                               index
+                               var)
     nil)))
 
 
@@ -149,8 +165,8 @@ Any changes to this value must run `prog-face-refine-refresh' for them to be tak
 ;; Internal API
 
 (defun prog-face-refine--match-impl (state match-list)
-  "Match the comment at POINT for STATE using MATCH-LIST.
-Return the face or NIL for default behavior."
+  "Match the syntax element at POINT for STATE using MATCH-LIST.
+Return the face or nil for default behavior."
   (let ((result nil))
     (while match-list
       (let ((item (pop match-list)))
@@ -167,13 +183,13 @@ Return the face or NIL for default behavior."
     result))
 
 (defsubst prog-face-refine--match-string (state)
-  "Return a string match from STATE or nil."
+  "Return the face for a matched string from STATE, or nil."
   (save-excursion
     (goto-char (nth 8 state))
     (prog-face-refine--match-impl state prog-face-refine--list-string)))
 
 (defsubst prog-face-refine--match-comment (state)
-  "Return a comment match from STATE or nil."
+  "Return the face for a matched comment from STATE, or nil."
   (save-excursion
     (goto-char (nth 8 state))
     (prog-face-refine--match-impl state prog-face-refine--list-comment)))
@@ -188,36 +204,50 @@ Return the face or NIL for default behavior."
     nil)))
 
 ;; ---------------------------------------------------------------------------
-;; Internal Wrapper Function
+;; Internal Wrapper Functions
 
 (defun prog-face-refine--font-lock-syntax-face-function-comment-and-string (orig-fn state)
-  "Wrapper for `font-lock-syntactic-face-function'.
-Run ORIG-FN with STATE."
+  "Wrapper that applies custom faces to both comments and strings.
+Falls back to ORIG-FN with STATE, or default faces if ORIG-FN is nil."
   (or (cond
        ((nth 3 state)
         (prog-face-refine--match-string state))
        ((nth 4 state)
         (prog-face-refine--match-comment state)))
       ;; Default behavior.
-      (funcall orig-fn state)))
+      (cond
+       (orig-fn
+        (funcall orig-fn state))
+       ((nth 3 state)
+        font-lock-string-face)
+       (t
+        font-lock-comment-face))))
 
 (defun prog-face-refine--font-lock-syntax-face-function-comment (orig-fn state)
-  "Wrapper for `font-lock-syntactic-face-function'.
-Run ORIG-FN with STATE."
+  "Wrapper that applies custom faces to comments only.
+Falls back to ORIG-FN with STATE, or the default face if ORIG-FN is nil."
   (or (cond
        ((nth 4 state)
         (prog-face-refine--match-comment state)))
       ;; Default behavior.
-      (funcall orig-fn state)))
+      (cond
+       (orig-fn
+        (funcall orig-fn state))
+       (t
+        font-lock-comment-face))))
 
 (defun prog-face-refine--font-lock-syntax-face-function-string (orig-fn state)
-  "Wrapper for `font-lock-syntactic-face-function'.
-Run ORIG-FN with STATE."
+  "Wrapper that applies custom faces to strings only.
+Falls back to ORIG-FN with STATE, or the default face if ORIG-FN is nil."
   (or (cond
        ((nth 3 state)
         (prog-face-refine--match-string state)))
       ;; Default behavior.
-      (funcall orig-fn state)))
+      (cond
+       (orig-fn
+        (funcall orig-fn state))
+       (t
+        font-lock-string-face))))
 
 
 ;; ---------------------------------------------------------------------------
@@ -226,9 +256,9 @@ Run ORIG-FN with STATE."
 (defun prog-face-refine--clear ()
   "Clear local variables and state.
 
-Return nil if the state is known not to have changed."
+Return non-nil if highlighting was previously enabled."
   (let ((is-enabled-prev (prog-face-refine--is-enabled))
-        (local-vars (list 'prog-face-refine--list-comment 'prog-face-refine--list-string))
+        (local-vars '(prog-face-refine--list-comment prog-face-refine--list-string))
         (local-fn-wrappers
          (list
           #'prog-face-refine--font-lock-syntax-face-function-comment-and-string
@@ -246,7 +276,7 @@ Return nil if the state is known not to have changed."
 (defun prog-face-refine--refresh ()
   "Refresh the local variables and state.
 
-Return nil if the state is known not to have changed."
+Return non-nil if highlighting was or is now enabled."
   (let ((is-enabled-prev (prog-face-refine--is-enabled))
         (is-enabled-next nil)
         (index 0)
@@ -261,7 +291,7 @@ Return nil if the state is known not to have changed."
           (push (cons match face) prog-face-refine--list-comment))
          ((eq ty 'string)
           (push (cons match face) prog-face-refine--list-string))
-         (t ;; `prog-face-refine--valid-type-or-warn' must catch this.
+         (t ;; prog-face-refine--valid-type-or-warn must catch this.
           (error "Internal error"))))
       (incf index))
 
@@ -296,8 +326,7 @@ Return nil if the state is known not to have changed."
 ;; Public API
 
 (defun prog-face-refine-refresh ()
-  "Update change from custom settings."
-  ;; Check the mode as refresh isn't needed unless the mode is active.
+  "Apply changes from custom settings when `prog-face-refine-mode' is active."
   (when (bound-and-true-p prog-face-refine-mode)
     (when (prog-face-refine--refresh)
       ;; Only flush on change as it's relatively expensive.
@@ -305,7 +334,8 @@ Return nil if the state is known not to have changed."
 
 ;;;###autoload
 (define-minor-mode prog-face-refine-mode
-  "Refine faces for programming modes."
+  "Toggle refined face highlighting for comments and strings.
+When enabled, applies custom faces based on `prog-face-refine-list'."
   :global nil
   :lighter
   prog-face-refine-lighter
