@@ -185,13 +185,13 @@ Return the face or nil for default behavior."
 (defsubst prog-face-refine--match-string (state)
   "Return the face for a matched string from STATE, or nil."
   (save-excursion
-    (goto-char (nth 8 state))
+    (goto-char (ppss-comment-or-string-start state))
     (prog-face-refine--match-impl state prog-face-refine--list-string)))
 
 (defsubst prog-face-refine--match-comment (state)
   "Return the face for a matched comment from STATE, or nil."
   (save-excursion
-    (goto-char (nth 8 state))
+    (goto-char (ppss-comment-or-string-start state))
     (prog-face-refine--match-impl state prog-face-refine--list-comment)))
 
 
@@ -210,15 +210,15 @@ Return the face or nil for default behavior."
   "Wrapper that applies custom faces to both comments and strings.
 Falls back to ORIG-FN with STATE, or default faces if ORIG-FN is nil."
   (or (cond
-       ((nth 3 state)
+       ((ppss-string-terminator state)
         (prog-face-refine--match-string state))
-       ((nth 4 state)
+       ((ppss-comment-depth state)
         (prog-face-refine--match-comment state)))
       ;; Default behavior.
       (cond
        (orig-fn
         (funcall orig-fn state))
-       ((nth 3 state)
+       ((ppss-string-terminator state)
         font-lock-string-face)
        (t
         font-lock-comment-face))))
@@ -227,7 +227,7 @@ Falls back to ORIG-FN with STATE, or default faces if ORIG-FN is nil."
   "Wrapper that applies custom faces to comments only.
 Falls back to ORIG-FN with STATE, or the default face if ORIG-FN is nil."
   (or (cond
-       ((nth 4 state)
+       ((ppss-comment-depth state)
         (prog-face-refine--match-comment state)))
       ;; Default behavior.
       (cond
@@ -240,7 +240,7 @@ Falls back to ORIG-FN with STATE, or the default face if ORIG-FN is nil."
   "Wrapper that applies custom faces to strings only.
 Falls back to ORIG-FN with STATE, or the default face if ORIG-FN is nil."
   (or (cond
-       ((nth 3 state)
+       ((ppss-string-terminator state)
         (prog-face-refine--match-string state)))
       ;; Default behavior.
       (cond
