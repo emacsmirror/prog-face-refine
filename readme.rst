@@ -30,7 +30,7 @@ This package exposes the following functions.
 ``prog-face-refine-mode``
    Toggles face refine mode.
 ``prog-face-refine-refresh``
-   Run this comment after changes to custom-settings.
+   Run this command after changes to custom-settings.
 
 
 Customization
@@ -39,7 +39,7 @@ Customization
 ``prog-face-refine-list``: ``nil``
    A list of items, each item is a match with the following format.
 
-   The items are formatters as follows.
+   Each item has the following format.
 
    - First is a match, either a REGEXP string or a function.
 
@@ -76,7 +76,7 @@ differently in emacs-lisp.
           (list ";;;[[:blank:]]" 'comment '((t (:inherit warning :weight bold))))))
    (prog-face-refine-refresh)
 
-This examples shows how ``# ~`` and ``# !`` prefixed comments can be highlighted in Python.
+This example shows how ``# ~`` and ``# !`` prefixed comments can be highlighted in Python.
 
 .. code-block::
 
@@ -100,7 +100,7 @@ If you wish to configure ``prog-face-refine-list`` separately, this is all that 
     :commands (prog-face-refine-mode))
 
 
-This examples shows faces configured for modes using ``use-package`` hooks.
+This example shows faces configured for modes using ``use-package`` hooks.
 
 .. code-block:: elisp
 
